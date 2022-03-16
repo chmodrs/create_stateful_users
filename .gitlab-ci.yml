@@ -1,0 +1,95 @@
+image:
+  name: hashicorp/terraform:light
+  entrypoint:
+    - '/usr/bin/env'
+    - 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+variables:
+   TF_VAR_host: ${INTERNO_DEV_HOST}
+   TF_VAR_cluster_ca_certificate: ${INTERNO_DEV_CLUSTER_CA_CERTIFICATE}
+   TF_VAR_helm_repository: ${HELM_REPOSITORY}
+   TF_VAR_helm_username: ${HELM_USERNAME}
+   TF_VAR_helm_password: ${HELM_PASSWORD}
+   AWS_S3_ENDPOINT: ${INTERNO_DEV_AWS_S3_ENDPOINT}
+   TF_VAR_minio_endpoint: ${INTERNO_DEV_AWS_S3_ENDPOINT}
+   TF_VAR_access_key: ${INTERNO_DEV_MINIO_ACCESS_KEY}
+   TF_VAR_secret_key: ${INTERNO_DEV_MINIO_SECRET_KEY}
+   TF_VAR_keycloak_admin_user: ${INTERNO_DEV_KEYCLOAK_USER}
+   TF_VAR_keycloak_admin_pass: ${INTERNO_DEV_KEYCLOAK_PASS}
+   TF_VAR_rabbitmq_admin_user: ${INTERNO_DEV_RABBITMQ_ADMIN_USER}
+   TF_VAR_rabbitmq_admin_pass: ${INTERNO_DEV_RABBITMQ_ADMIN_PASS}
+   TF_VAR_rabbitmq_api_port: ${INTERNO_DEV_RABBITMQ_API_PORT}
+   TF_VAR_rabbitmq_endpoint: ${INTERNO_DEV_RABBITMQ_ENDPOINT}
+   TF_VAR_smtp_host: ${SMTP_HOST}
+   TF_VAR_smtp_port: ${SMTP_PORT}
+   TF_VAR_smtp_mail: ${SMTP_MAIL}
+   TF_VAR_smtp_user: ${SMTP_USER}
+   TF_VAR_smtp_password: ${SMTP_PASSWORD}
+   TF_VAR_keycloak_custom_federation_flavor: ${INTERNO_DEV_KEYCLOAK_CUSTOM_FEDERATION_FLAVOR}
+   TF_VAR_keycloak_custom_federation_jdbcuri: ${INTERNO_DEV_KEYCLOAK_CUSTOM_FEDERATION_JDBCURI}
+   TF_VAR_keycloak_custom_federation_user: ${INTERNO_DEV_KEYCLOAK_CUSTOM_FEDERATION_USER}
+   TF_VAR_keycloak_custom_federation_password: ${INTERNO_DEV_KEYCLOAK_CUSTOM_FEDERATION_PASSWORD}
+   TF_VAR_elasticsearch_admin_user: ${INTERNO_DEV_ELASTICSEARCH_ADMIN_USER}
+   TF_VAR_elasticsearch_admin_pass: ${INTERNO_DEV_ELASTICSEARCH_ADMIN_PASS}
+   TF_VAR_mongodb_admin_user: ${INTERNO_DEV_MONGODB_ADMIN_USER}
+   TF_VAR_mongodb_admin_pass: ${INTERNO_DEV_MONGODB_ADMIN_PASS}
+   TF_VAR_namespace: ${namespace}
+   TF_VAR_password: ${password}
+   TF_VAR_token: ${token}
+   TF_VAR_registry_url: ${REGISTRY_URL}
+   TF_VAR_registry_user: ${REGISTRY_USER}
+   TF_VAR_registry_password: ${REGISTRY_PASSWORD}
+  
+before_script:
+  - sh startup.sh
+
+stages:
+  - format_validate_refresh
+  - plan
+  - apply
+  # - destroy
+  - trigger
+
+#redis-create:
+#  stage: redis-create
+#  script:
+#    - apk update && apk add redis
+#    - redis-cli -v 
+#    - redis-cli -h ${INTERNO_DEV_REDIS_ENDPOINT} -p 6379 -a ${INTERNO_DEV_REDIS_PASSWORD} ACL SETUSER ortizfurt on >passwd ~s-dev-ortizfurt.:* +@all
+
+format_validate_refresh:
+  stage: format_validate_refresh
+  script:
+    - terraform fmt -check -diff && terraform validate && terraform refresh
+
+plan:
+  stage: plan
+  script:
+    - terraform plan -out "planfile"
+  dependencies:
+    - format_validate_refresh
+  artifacts:
+    paths:
+      - planfile
+
+apply:
+  stage: apply
+  script:
+    - terraform apply -input=false "planfile"
+  dependencies:
+    - plan
+
+# destroy:
+#   stage: destroy
+#   script:
+#     - terraform destroy -auto-approve
+#   dependencies:
+#     - plan
+#   when: manual
+
+multi-project_pipeline:
+  variables:
+    TF_VAR_namespace: ${TF_VAR_namespace}
+    TF_VAR_password: ${TF_VAR_password}
+  stage: trigger
+  trigger: UNJ/CROSS/SRE/nova-esteira/create_tj_deployments
